@@ -5,4 +5,5 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   base: '/Linkedin-1/',
   plugins: [react(), tailwindcss()],
+  base: '/Linkedin-1/',
 });
