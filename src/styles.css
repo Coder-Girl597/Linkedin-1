@@ -123,6 +123,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .composer-tools { display: flex; align-items: center; gap: 7px; }
 .composer-tools button { border: 0; background: white; display: flex; align-items: center; gap: 6px; border-radius: 6px; color: #626f7d; padding: 7px 8px; cursor: pointer; font-size: 10px; font-weight: 600; transition: background .18s; }
 .composer-tools button:hover { background: #f2f5f8; }
+.composer-tools button:disabled { cursor: not-allowed; opacity: .55; }
 .photo-tool { color: #3784cf; }.video-tool { color: #a979d2; }.document-tool { color: #df8c4c; }
 .publish-button { border: 0; color: white; background: #2775c7; border-radius: 18px; padding: 7px 17px; font-weight: 650; font-size: 11px; cursor: pointer; transition: background .18s, opacity .18s; }
 .publish-button:hover:not(:disabled) { background: #185fae; }
@@ -168,6 +169,13 @@ button { -webkit-tap-highlight-color: transparent; }
 .attachment-tile span { display: flex; flex-direction: column; gap: 4px; color: #344151; min-width: 0; }
 .attachment-tile strong { font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .attachment-tile small { color: #768391; font-size: 10px; }
+.post-uploaded-media { display: block; width: 100%; max-height: 520px; object-fit: contain; border-radius: 7px; background: #f1f3f5; }
+.post-uploaded-video { background: #101418; }
+.attachment-preview { display: flex; flex-direction: column; gap: 8px; }
+.post-document-preview { display: block; width: 100%; height: 420px; border: 1px solid #e5e8ec; border-radius: 7px; background: white; }
+.attachment-document-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; white-space: nowrap; }
+.attachment-document-actions a, .attachment-download { color: #2874c8; font-size: 10px; font-weight: 650; text-decoration: none; }
+.attachment-document-actions a:hover, .attachment-download:hover { text-decoration: underline; }
 .shared-post { display: flex; flex-direction: column; gap: 6px; border: 1px solid #e7eaee; border-radius: 7px; padding: 12px; font-size: 11px; color: #5d6977; line-height: 1.45; }
 .shared-post strong { color: #344151; }
 .repost-by { display: flex; align-items: center; gap: 5px; color: #73808d; font-size: 10px; margin: -3px 0 11px 1px; }

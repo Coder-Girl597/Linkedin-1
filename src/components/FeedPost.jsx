@@ -5,7 +5,14 @@ import {
 } from 'lucide-react';
 import Avatar from './Avatar.jsx';
 
-export default function FeedPost({ post, user, onLike, onComment, onRepost, onSave, onMessage, onReport }) {
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default function FeedPost({ post, mediaUrl, user, onLike, onComment, onRepost, onSave, onMessage, onReport }) {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -48,10 +55,37 @@ export default function FeedPost({ post, user, onLike, onComment, onRepost, onSa
       </div>
       <p className="post-copy">{post.content}</p>
       {post.attachment && (
-        <div className={`attachment-tile attachment-${post.attachment.kind}`}>
-          {post.attachment.kind === 'video' ? <Video size={28} /> : post.attachment.kind === 'document' ? <FileText size={28} /> : <Image size={28} />}
-          <span><strong>{post.attachment.name}</strong><small>{post.attachment.kind === 'document' ? 'Document attachment' : `${post.attachment.kind[0].toUpperCase()}${post.attachment.kind.slice(1)} attachment`}</small></span>
-        </div>
+        post.attachment.kind === 'photo' && mediaUrl ? (
+          <img className="post-uploaded-media" src={mediaUrl} alt={`Photo attachment: ${post.attachment.name}`} loading="lazy" />
+        ) : post.attachment.kind === 'video' && mediaUrl ? (
+          <video className="post-uploaded-media post-uploaded-video" src={mediaUrl} controls playsInline preload="metadata" aria-label={`Video attachment: ${post.attachment.name}`} />
+        ) : (
+          <div className={`attachment-preview attachment-${post.attachment.kind}`}>
+            {post.attachment.kind === 'document' && mediaUrl && (post.attachment.type === 'application/pdf' || post.attachment.name.toLowerCase().endsWith('.pdf')) && (
+              <iframe className="post-document-preview" src={mediaUrl} title={`Preview of ${post.attachment.name}`} loading="lazy" />
+            )}
+            <div className={`attachment-tile attachment-${post.attachment.kind}`}>
+              {post.attachment.kind === 'video' ? <Video size={28} /> : post.attachment.kind === 'document' ? <FileText size={28} /> : <Image size={28} />}
+              <span>
+                <strong>{post.attachment.name}</strong>
+                <small>
+                  {mediaUrl
+                    ? `${post.attachment.kind === 'document' ? 'Document' : post.attachment.kind === 'video' ? 'Video' : 'Photo'} attachment${formatFileSize(post.attachment.size) ? ` · ${formatFileSize(post.attachment.size)}` : ''}`
+                    : 'Preview unavailable'}
+                </small>
+              </span>
+              {mediaUrl && post.attachment.kind === 'document' && (
+                <div className="attachment-document-actions">
+                  <a href={mediaUrl} target="_blank" rel="noreferrer">Open</a>
+                  <a href={mediaUrl} download={post.attachment.name}>Download</a>
+                </div>
+              )}
+              {mediaUrl && post.attachment.kind !== 'document' && (
+                <a className="attachment-download" href={mediaUrl} download={post.attachment.name}>Download</a>
+              )}
+            </div>
+          </div>
+        )
       )}
       {post.image && (
         <div className={`post-image post-image-${post.id}`}>

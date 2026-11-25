@@ -46,6 +46,7 @@ const skills = [
 export default function ProfileView({
   user,
   posts,
+  mediaUrls = {},
   onBack,
   onLike,
   onComment,
@@ -141,6 +142,7 @@ export default function ProfileView({
                   <FeedPost
                     key={post.id}
                     post={post}
+                    mediaUrl={mediaUrls[post.attachment?.id]}
                     user={user}
                     onLike={onLike}
                     onComment={onComment}

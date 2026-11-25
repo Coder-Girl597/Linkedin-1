@@ -9,6 +9,7 @@ import { LeftSidebar, RightSidebar } from './components/Sidebars.jsx';
 import { JobsView, MessagingView, NetworkView, NotificationsView } from './components/Views.jsx';
 import ProfileView from './components/ProfileView.jsx';
 import { currentUser, initialPosts, people } from './data.js';
+import { deleteAttachment, getAttachment, saveAttachment } from './attachmentStorage.js';
 
 const STORAGE_KEY = 'connectly-demo-v1';
 
@@ -30,12 +31,13 @@ function getInitial(key, fallback) {
   return stored[key] ?? fallback;
 }
 
-function ComposePost({ onPublish, user }) {
+function ComposePost({ onPublish, onError, user }) {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState(null);
   const [attachmentKind, setAttachmentKind] = useState('photo');
+  const [uploading, setUploading] = useState(false);
   const inputRef = useRef(null);
-  const canPublish = Boolean(text.trim() || attachment);
+  const canPublish = Boolean(text.trim() || attachment) && !uploading;
 
   const openFilePicker = (kind) => {
     setAttachmentKind(kind);
@@ -52,6 +54,59 @@ function ComposePost({ onPublish, user }) {
     setAttachment(null);
   };
 
+  const clearAttachment = () => {
+    if (!attachment) return;
+    URL.revokeObjectURL(attachment.previewUrl);
+    setAttachment(null);
+    deleteAttachment(attachment.id).catch((error) => {
+      console.error('Connectly could not remove the selected attachment.', error);
+      onError('Could not remove the selected attachment from browser storage.');
+    });
+  };
+
+  const handleFileChange = async (event) => {
+    const file = event.currentTarget.files?.[0];
+    const input = event.currentTarget;
+    if (!file) return;
+
+    let id;
+    let previewUrl;
+    setUploading(true);
+    try {
+      id = crypto.randomUUID();
+      previewUrl = URL.createObjectURL(file);
+      await saveAttachment(id, file);
+
+      if (attachment) {
+        URL.revokeObjectURL(attachment.previewUrl);
+        deleteAttachment(attachment.id).catch((error) => {
+          console.error('Connectly could not replace the previous attachment.', error);
+          onError('Could not remove the previous attachment from browser storage.');
+        });
+      }
+      setAttachment({
+        id,
+        kind: attachmentKind,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        previewUrl,
+      });
+    } catch (error) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (id) {
+        deleteAttachment(id).catch((cleanupError) => {
+          console.error('Connectly could not clean up an incomplete attachment.', cleanupError);
+        });
+      }
+      console.error('Connectly could not save the selected attachment.', error);
+      onError('Could not attach that file. Please try again.');
+    } finally {
+      setUploading(false);
+      input.value = '';
+    }
+  };
+
   return (
     <section className="card composer">
       <div className="composer-top">
@@ -60,20 +115,16 @@ function ComposePost({ onPublish, user }) {
       </div>
       <textarea id="post-text" value={text} onChange={(event) => setText(event.target.value)} placeholder="What have you been working on?" aria-label="Write a post" rows="2" />
       {attachment && (
-        <div className="selected-attachment"><FileText size={16} /><span>{attachment.name}</span><button onClick={() => setAttachment(null)} aria-label="Remove attachment"><X size={15} /></button></div>
+        <div className="selected-attachment"><FileText size={16} /><span>{attachment.name}</span><button onClick={clearAttachment} disabled={uploading} aria-label="Remove attachment"><X size={15} /></button></div>
       )}
-      <input ref={inputRef} className="visually-hidden" type="file" onChange={(event) => {
-        const file = event.target.files?.[0];
-        if (file) setAttachment({ kind: attachmentKind, name: file.name });
-        event.target.value = '';
-      }} />
+      <input ref={inputRef} className="visually-hidden" type="file" onChange={handleFileChange} />
       <div className="composer-bottom">
         <div className="composer-tools">
-          <button onClick={() => openFilePicker('photo')}><Image size={19} className="photo-tool" /><span>Photo</span></button>
-          <button onClick={() => openFilePicker('video')}><Video size={19} className="video-tool" /><span>Video</span></button>
-          <button onClick={() => openFilePicker('document')}><FileText size={19} className="document-tool" /><span>Document</span></button>
+          <button onClick={() => openFilePicker('photo')} disabled={uploading}><Image size={19} className="photo-tool" /><span>Photo</span></button>
+          <button onClick={() => openFilePicker('video')} disabled={uploading}><Video size={19} className="video-tool" /><span>Video</span></button>
+          <button onClick={() => openFilePicker('document')} disabled={uploading}><FileText size={19} className="document-tool" /><span>Document</span></button>
         </div>
-        <button className="publish-button" onClick={publish} disabled={!canPublish}>Post</button>
+        <button className="publish-button" onClick={publish} disabled={!canPublish}>{uploading ? 'Uploading…' : 'Post'}</button>
       </div>
     </section>
   );
@@ -130,6 +181,8 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [messageTarget, setMessageTarget] = useState('');
   const toastTimer = useRef(null);
+  const [mediaUrls, setMediaUrls] = useState({});
+  const mediaUrlsRef = useRef(new Map());
 
   useEffect(() => {
     try {
@@ -148,6 +201,44 @@ export default function App() {
     };
     window.addEventListener('connectly:saved', openSaved);
     return () => window.removeEventListener('connectly:saved', openSaved);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const attachments = [...new Map(
+      posts
+        .filter((post) => post.attachment?.id)
+        .map((post) => [post.attachment.id, post.attachment]),
+    ).values()];
+
+    Promise.all(attachments.map(async (attachment) => ({
+      id: attachment.id,
+      file: await getAttachment(attachment.id),
+    })))
+      .then((storedAttachments) => {
+        if (!active) return;
+        const restoredUrls = {};
+        storedAttachments.forEach(({ id, file }) => {
+          if (!file || mediaUrlsRef.current.has(id)) return;
+          const url = URL.createObjectURL(file);
+          mediaUrlsRef.current.set(id, url);
+          restoredUrls[id] = url;
+        });
+        if (Object.keys(restoredUrls).length) {
+          setMediaUrls((current) => ({ ...current, ...restoredUrls }));
+        }
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error('Connectly could not restore post attachments.', error);
+        showToast('Could not load some saved post attachments.');
+      });
+
+    return () => {
+      active = false;
+      mediaUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      mediaUrlsRef.current.clear();
+    };
   }, []);
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
@@ -180,12 +271,23 @@ export default function App() {
   }
 
   function publishPost(content, attachment) {
+    const savedAttachment = attachment && {
+      id: attachment.id,
+      kind: attachment.kind,
+      name: attachment.name,
+      type: attachment.type,
+      size: attachment.size,
+    };
+    if (attachment?.previewUrl) {
+      mediaUrlsRef.current.set(attachment.id, attachment.previewUrl);
+      setMediaUrls((current) => ({ ...current, [attachment.id]: attachment.previewUrl }));
+    }
     const newPost = {
       id: `post-${Date.now()}`,
       author: { name: currentUser.name, headline: currentUser.headline, initials: currentUser.initials, avatar: currentUser.avatar },
       time: 'now',
       content,
-      attachment,
+      attachment: savedAttachment,
       likes: 0,
       comments: 0,
       liked: false,
@@ -287,13 +389,14 @@ export default function App() {
               ) : (
                 <div className="feed-heading"><div><h1>Your community, in the know.</h1><p>Ideas and people worth your time.</p></div><button className="feed-sort" onClick={() => showToast('Your feed is sorted by most relevant')}><ArrowDownWideNarrow size={15} /> <span>Top</span> <ChevronDown size={14} /></button></div>
               )}
-              {!savedOnly && <ComposePost onPublish={publishPost} user={currentUser} />}
+              {!savedOnly && <ComposePost onPublish={publishPost} onError={showToast} user={currentUser} />}
               {query && <div className="search-results-label">Showing posts matching <strong>“{query}”</strong> <button onClick={() => setQuery('')}>Clear</button></div>}
               <div className="feed-list">
                 {visiblePosts.map((post) => (
                   <FeedPost
                     key={post.id}
                     post={post}
+                    mediaUrl={mediaUrls[post.attachment?.id]}
                     user={currentUser}
                     onLike={toggleLike}
                     onComment={addComment}
@@ -323,6 +426,7 @@ export default function App() {
             <ProfileView
               user={currentUser}
               posts={posts}
+              mediaUrls={mediaUrls}
               onBack={() => { setActiveTab('home'); setSavedOnly(false); setQuery(''); }}
               onLike={toggleLike}
               onComment={addComment}
